@@ -92,6 +92,7 @@ namespace DormManagement.Forms
                     DBHelper.Execute("INSERT INTO Bed(room_id,bed_no) VALUES(@r,@n)",
                         new SqlParameter("@r", roomId),
                         new SqlParameter("@n", i.ToString()));
+                DBHelper.Log("寝室", "新增", $"新增寝室 房号{txtRoomNo.Text.Trim()}（{cap}床）");
                 LoadData();
                 MessageBox.Show($"已新增寝室并自动生成 {cap} 张床位");
             }
@@ -104,9 +105,11 @@ namespace DormManagement.Forms
             if (txtRoomNo.Text.Trim() == "") { MessageBox.Show("请填写新房号"); return; }
             try
             {
-                DBHelper.Execute("UPDATE Room SET room_no=@r WHERE room_id=@id",
-                    new SqlParameter("@r", txtRoomNo.Text.Trim()),
-                    new SqlParameter("@id", id));
+                DBHelper.ExecuteLogged("UPDATE Room SET room_no=@r WHERE room_id=@id",
+                    new[] {
+                        new SqlParameter("@r", txtRoomNo.Text.Trim()),
+                        new SqlParameter("@id", id) },
+                    "寝室", "修改", $"寝室改房号 → {txtRoomNo.Text.Trim()}（编号{id}）");
                 LoadData();
             }
             catch (SqlException ex) when (ex.Number is 2627 or 2601) { MessageBox.Show("该楼下房号已存在"); }
@@ -117,16 +120,15 @@ namespace DormManagement.Forms
             if (CurrentId() is not int id) { MessageBox.Show("请先选择一行"); return; }
             if (CurrentOccupied() > 0) { MessageBox.Show("寝室内仍有学生住宿，不能删除"); return; }
             if (MessageBox.Show("确认删除该寝室及其床位？", "确认", MessageBoxButtons.YesNo) != DialogResult.Yes) return;
+            var rno = grid.CurrentRow?.Cells["房号"].Value?.ToString() ?? id.ToString();
             try
             {
-                // 事务内先删床位再删寝室
-                DBHelper.Execute(
-                    @"BEGIN TRY BEGIN TRAN;
-                        DELETE FROM Bed WHERE room_id=@id;
-                        DELETE FROM Room WHERE room_id=@id;
-                      COMMIT; END TRY
-                      BEGIN CATCH ROLLBACK; THROW; END CATCH",
-                    new SqlParameter("@id", id));
+                // 删床位 + 删寝室 + 记日志都在 ExecuteLogged 的同一事务内
+                DBHelper.ExecuteLogged(
+                    @"DELETE FROM Bed WHERE room_id=@id;
+                      DELETE FROM Room WHERE room_id=@id;",
+                    new[] { new SqlParameter("@id", id) },
+                    "寝室", "删除", $"删除寝室 房号{rno}");
                 LoadData();
             }
             catch (SqlException ex) when (ex.Number == 547) { MessageBox.Show("寝室内有住宿记录，无法删除"); }

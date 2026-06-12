@@ -95,12 +95,15 @@ namespace DormManagement.Forms
             if (txtNo.Text.Trim() == "" || txtName.Text.Trim() == "") { MessageBox.Show("学号和姓名必填"); return; }
             try
             {
-                DBHelper.Execute("INSERT INTO Student(student_no,name,gender,class_id,phone) VALUES(@no,@nm,@g,@c,@p)",
-                    new SqlParameter("@no", txtNo.Text.Trim()),
-                    new SqlParameter("@nm", txtName.Text.Trim()),
-                    new SqlParameter("@g", NullIfEmpty(cmbGender.Text)),
-                    new SqlParameter("@c", ClassIdParam()),
-                    new SqlParameter("@p", NullIfEmpty(txtPhone.Text)));
+                DBHelper.ExecuteLogged(
+                    "INSERT INTO Student(student_no,name,gender,class_id,phone) VALUES(@no,@nm,@g,@c,@p)",
+                    new[] {
+                        new SqlParameter("@no", txtNo.Text.Trim()),
+                        new SqlParameter("@nm", txtName.Text.Trim()),
+                        new SqlParameter("@g", NullIfEmpty(cmbGender.Text)),
+                        new SqlParameter("@c", ClassIdParam()),
+                        new SqlParameter("@p", NullIfEmpty(txtPhone.Text)) },
+                    "学生", "新增", $"新增学生 {txtName.Text.Trim()}({txtNo.Text.Trim()})");
                 LoadData();
             }
             catch (SqlException ex) when (ex.Number is 2627 or 2601) { MessageBox.Show("学号已存在"); }
@@ -109,13 +112,16 @@ namespace DormManagement.Forms
         void Upd()
         {
             if (CurrentId() is not int id) { MessageBox.Show("请先选择一行"); return; }
-            DBHelper.Execute("UPDATE Student SET student_no=@no,name=@nm,gender=@g,class_id=@c,phone=@p WHERE student_id=@id",
-                new SqlParameter("@no", txtNo.Text.Trim()),
-                new SqlParameter("@nm", txtName.Text.Trim()),
-                new SqlParameter("@g", NullIfEmpty(cmbGender.Text)),
-                new SqlParameter("@c", ClassIdParam()),
-                new SqlParameter("@p", NullIfEmpty(txtPhone.Text)),
-                new SqlParameter("@id", id));
+            DBHelper.ExecuteLogged(
+                "UPDATE Student SET student_no=@no,name=@nm,gender=@g,class_id=@c,phone=@p WHERE student_id=@id",
+                new[] {
+                    new SqlParameter("@no", txtNo.Text.Trim()),
+                    new SqlParameter("@nm", txtName.Text.Trim()),
+                    new SqlParameter("@g", NullIfEmpty(cmbGender.Text)),
+                    new SqlParameter("@c", ClassIdParam()),
+                    new SqlParameter("@p", NullIfEmpty(txtPhone.Text)),
+                    new SqlParameter("@id", id) },
+                "学生", "修改", $"修改学生 {txtName.Text.Trim()}({txtNo.Text.Trim()})");
             LoadData();
         }
 
@@ -123,9 +129,13 @@ namespace DormManagement.Forms
         {
             if (CurrentId() is not int id) { MessageBox.Show("请先选择一行"); return; }
             if (MessageBox.Show("确认删除该学生？", "确认", MessageBoxButtons.YesNo) != DialogResult.Yes) return;
+            var sno = grid.CurrentRow?.Cells["学号"].Value?.ToString() ?? "";
+            var sname = grid.CurrentRow?.Cells["姓名"].Value?.ToString() ?? "";
             try
             {
-                DBHelper.Execute("DELETE FROM Student WHERE student_id=@id", new SqlParameter("@id", id));
+                DBHelper.ExecuteLogged("DELETE FROM Student WHERE student_id=@id",
+                    new[] { new SqlParameter("@id", id) },
+                    "学生", "删除", $"删除学生 {sname}({sno})");
                 LoadData();
             }
             catch (SqlException ex) when (ex.Number == 547) { MessageBox.Show("该学生有住宿/记录，需先退宿后再删除"); }
