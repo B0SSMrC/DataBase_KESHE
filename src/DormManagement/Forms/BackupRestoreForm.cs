@@ -122,28 +122,45 @@ namespace DormManagement.Forms
                 return;
             try
             {
+                // 还原完整备份 + 前滚日志到 STOPAT；不在同批 SET MULTI_USER，
+                // 否则当 STOPAT 越过日志末尾、库停在 Restoring 时，ALTER 会失败
                 ExecMaster(
                     @"ALTER DATABASE DormDB SET SINGLE_USER WITH ROLLBACK IMMEDIATE;
                       RESTORE DATABASE DormDB FROM DISK=@full WITH NORECOVERY, REPLACE;
-                      RESTORE LOG DormDB FROM DISK=@log WITH STOPAT=@t, RECOVERY;
-                      ALTER DATABASE DormDB SET MULTI_USER;",
+                      RESTORE LOG DormDB FROM DISK=@log WITH STOPAT=@t, RECOVERY;",
                     new SqlParameter("@full", FullPath),
                     new SqlParameter("@log", LogPath),
                     new SqlParameter("@t", t));
-                Append($"[时间点恢复] 成功，已恢复到 {t:yyyy-MM-dd HH:mm:ss.fff}");
-                MessageBox.Show("恢复成功");
+
+                bool stillRestoring = Convert.ToInt32(
+                    ScalarMaster("SELECT state FROM sys.databases WHERE name=N'DormDB'")) == 1;
+                if (stillRestoring)
+                {
+                    // STOPAT 晚于日志备份最后一条记录：当前日志没覆盖到该时间点
+                    BringOnline();   // 恢复到日志最新时刻并上线，避免卡在 Restoring
+                    Append($"[时间点恢复] 所选时间点 {t:yyyy-MM-dd HH:mm:ss} 超出当前日志备份范围，已恢复到日志最新时刻。");
+                    MessageBox.Show(
+                        "所选时间点超出当前『日志备份』的覆盖范围，已恢复到日志中最新的时刻。\n\n" +
+                        "要回滚到某操作之前，请确保顺序：完整备份 → 执行(并完成)要回滚的操作 → 点【日志备份】" +
+                        "（让日志覆盖到该时间点）→ 再选该操作恢复。");
+                }
+                else
+                {
+                    ExecMaster("ALTER DATABASE DormDB SET MULTI_USER;");
+                    Append($"[时间点恢复] 成功，已恢复到 {t:yyyy-MM-dd HH:mm:ss.fff}");
+                    MessageBox.Show("恢复成功");
+                }
             }
             catch (SqlException ex)
             {
                 Fail("时间点恢复", ex);
                 BringOnline();
-                MessageBox.Show("时间点恢复失败：" + ex.Message +
-                    "\n\n已自动将数据库恢复到完整备份时刻并重新上线，可正常登录。");
+                MessageBox.Show("时间点恢复失败：" + ex.Message + "\n\n已自动将数据库重新上线，可正常登录。");
             }
-            LoadOpLog();   // 回滚后日志也回到该刻，刷新时间线
+            LoadOpLog();   // 刷新时间线
         }
 
-        // 时间线选中一行 → 计算 STOPAT（+500ms 缓冲确保跨过该笔事务提交点）→ 恢复
+        // 时间线选中一行 → 取相邻两条操作的中点作 STOPAT（必含一侧、必排除另一侧，避免越过目标）→ 恢复
         void RestoreBySelectedRow(bool before)
         {
             if (gridLog.CurrentRow?.Cells["编号"].Value is not int opId
@@ -157,11 +174,17 @@ namespace DormManagement.Forms
                     new SqlParameter("@id", opId));
                 if (prev is null or DBNull)
                 { MessageBox.Show("这已是最早的操作记录；如需更早请直接还原完整备份基线。"); return; }
-                stopAt = Convert.ToDateTime(prev).AddMilliseconds(500);   // 含前一条，排除选中这条
+                var prevTime = Convert.ToDateTime(prev);
+                stopAt = prevTime.AddTicks((opTime - prevTime).Ticks / 2);   // 前一条与选中之间的中点：含前一条、排除选中
             }
             else
             {
-                stopAt = opTime.AddMilliseconds(500);   // 含选中这条
+                var next = DBHelper.Scalar("SELECT MIN(op_time) FROM OperationLog WHERE op_id > @id",
+                    new SqlParameter("@id", opId));
+                if (next is null or DBNull)
+                    stopAt = opTime.AddSeconds(1);   // 选中为最新一条，取其后一点
+                else
+                    stopAt = opTime.AddTicks((Convert.ToDateTime(next) - opTime).Ticks / 2);   // 选中与下一条之间：含选中、排除下一条
             }
             RunRestore(stopAt);
         }
@@ -186,6 +209,14 @@ namespace DormManagement.Forms
             cmd.Parameters.AddRange(ps);
             conn.Open();
             cmd.ExecuteNonQuery();
+        }
+
+        static object? ScalarMaster(string sql)
+        {
+            using var conn = new SqlConnection(MasterCs);
+            using var cmd = new SqlCommand(sql, conn) { CommandTimeout = 120 };
+            conn.Open();
+            return cmd.ExecuteScalar();
         }
 
         // 失败兜底：若数据库停在 RESTORING(state=1) 则完成恢复让其上线，并恢复多用户访问
