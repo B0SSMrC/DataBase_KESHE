@@ -7,6 +7,7 @@ namespace DormManagement.Forms
         public MainForm(string loginName)
         {
             _operator = loginName;
+            Session.CurrentOperator = loginName;   // 供操作日志记录使用
             Text = "学生宿舍管理系统";
             Width = 920; Height = 620;
             StartPosition = FormStartPosition.CenterScreen;
