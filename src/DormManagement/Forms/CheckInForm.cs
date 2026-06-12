@@ -107,8 +107,11 @@ namespace DormManagement.Forms
             if (cmbBed.SelectedValue is not int bid) { MessageBox.Show("请选择楼、房、空床"); return; }
             try
             {
-                DBHelper.Execute("INSERT INTO Allocation(student_id,bed_id) VALUES(@s,@b)",
-                    new SqlParameter("@s", sid), new SqlParameter("@b", bid));
+                var sno = grid.CurrentRow?.Cells["学号"].Value?.ToString() ?? "";
+                var sname = grid.CurrentRow?.Cells["姓名"].Value?.ToString() ?? "";
+                DBHelper.ExecuteLogged("INSERT INTO Allocation(student_id,bed_id) VALUES(@s,@b)",
+                    new[] { new SqlParameter("@s", sid), new SqlParameter("@b", bid) },
+                    "入住", "新增", $"入住 {sname}({sno})");
                 DBHelper.Execute("INSERT INTO HousingLog(student_id,bed_id,op_type,operator) VALUES(@s,@b,'入住',@op)",
                     new SqlParameter("@s", sid), new SqlParameter("@b", bid),
                     new SqlParameter("@op", NullIfEmpty(_operator)));

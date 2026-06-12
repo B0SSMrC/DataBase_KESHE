@@ -110,8 +110,11 @@ namespace DormManagement.Forms
             if (cmbBed.SelectedValue is not int bid) { MessageBox.Show("请选择目标楼、房、空床"); return; }
             try
             {
-                DBHelper.Execute("UPDATE Allocation SET bed_id=@b WHERE student_id=@s",
-                    new SqlParameter("@b", bid), new SqlParameter("@s", sid));
+                var sno = grid.CurrentRow?.Cells["学号"].Value?.ToString() ?? "";
+                var sname = grid.CurrentRow?.Cells["姓名"].Value?.ToString() ?? "";
+                DBHelper.ExecuteLogged("UPDATE Allocation SET bed_id=@b WHERE student_id=@s",
+                    new[] { new SqlParameter("@b", bid), new SqlParameter("@s", sid) },
+                    "调宿", "修改", $"调宿 {sname}({sno}) → 床位{bid}");
                 DBHelper.Execute("INSERT INTO HousingLog(student_id,bed_id,op_type,operator) VALUES(@s,@b,'调宿',@op)",
                     new SqlParameter("@s", sid), new SqlParameter("@b", bid),
                     new SqlParameter("@op", NullIfEmpty(_operator)));
