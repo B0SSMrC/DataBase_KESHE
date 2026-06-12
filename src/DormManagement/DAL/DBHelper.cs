@@ -91,5 +91,16 @@ namespace DormManagement.DAL
                 new SqlParameter("@d", (object?)description ?? DBNull.Value),
                 new SqlParameter("@o", string.IsNullOrWhiteSpace(Session.CurrentOperator)
                     ? (object)DBNull.Value : Session.CurrentOperator));
+
+        // 确保操作日志表存在：即使 PITR 回滚到建表之前、或未手动跑 sql/10，启动时也能自愈
+        public static void EnsureOperationLog()
+            => Execute(@"IF OBJECT_ID('OperationLog','U') IS NULL
+                         CREATE TABLE OperationLog(
+                             op_id       INT IDENTITY(1,1) PRIMARY KEY,
+                             op_time     DATETIME2(3) NOT NULL DEFAULT SYSDATETIME(),
+                             category    NVARCHAR(20) NOT NULL,
+                             action      NVARCHAR(10) NOT NULL,
+                             description NVARCHAR(200) NULL,
+                             operator    NVARCHAR(50)  NULL);");
     }
 }
