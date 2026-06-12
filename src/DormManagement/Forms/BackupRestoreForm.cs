@@ -1,5 +1,6 @@
 using System.IO;
 using Microsoft.Data.SqlClient;
+using DormManagement.DAL;
 
 namespace DormManagement.Forms
 {
@@ -24,8 +25,14 @@ namespace DormManagement.Forms
         };
         readonly TextBox txtLog = new()
         {
-            Multiline = true, Dock = DockStyle.Fill, ReadOnly = true,
+            Multiline = true, Dock = DockStyle.Bottom, Height = 120, ReadOnly = true,
             ScrollBars = ScrollBars.Vertical, Font = new Font("Consolas", 9), BackColor = Color.White
+        };
+        readonly DataGridView gridLog = new()
+        {
+            Dock = DockStyle.Fill, ReadOnly = true, AllowUserToAddRows = false,
+            SelectionMode = DataGridViewSelectionMode.FullRowSelect, MultiSelect = false,
+            AutoGenerateColumns = true, AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill
         };
 
         public BackupRestoreForm()
@@ -33,30 +40,42 @@ namespace DormManagement.Forms
             Text = "备份与恢复"; Width = 740; Height = 480;
             StartPosition = FormStartPosition.CenterParent;
 
-            var btnFull = new Button { Text = "完整备份", Width = 100 };
-            var btnLog = new Button { Text = "日志备份", Width = 100 };
-            var btnRestore = new Button { Text = "恢复到所选时间点", Width = 150 };
+            var btnFull = new Button { Text = "完整备份", Width = 90 };
+            var btnLog = new Button { Text = "日志备份", Width = 90 };
+            var btnRestore = new Button { Text = "恢复到所选时间点", Width = 140 };
+            var btnRefreshLog = new Button { Text = "刷新日志", Width = 80 };
+            var btnBefore = new Button { Text = "恢复到选中之前", Width = 120 };
+            var btnAfter = new Button { Text = "恢复到选中之后", Width = 120 };
 
-            var top = new FlowLayoutPanel { Dock = DockStyle.Top, Height = 90, Padding = new Padding(8) };
+            var top = new FlowLayoutPanel { Dock = DockStyle.Top, Height = 120, Padding = new Padding(8) };
             top.Controls.AddRange(new Control[] {
                 btnFull, btnLog,
-                new Label{ Text="时间点", AutoSize=true, Padding=new Padding(14,10,0,0) }, dtp, btnRestore });
+                new Label{ Text="时间点", AutoSize=true, Padding=new Padding(14,10,0,0) }, dtp, btnRestore,
+                btnRefreshLog, btnBefore, btnAfter });
 
-            Controls.Add(txtLog);   // Fill（先加）
+            Controls.Add(gridLog);  // Fill（先加）
+            Controls.Add(txtLog);   // Bottom
             Controls.Add(top);      // Top（后加）
 
             Load += (_, _) =>
             {
                 Directory.CreateDirectory(BackupDir);
                 Append($"备份目录：{BackupDir}");
-                Append($"完整备份文件：{FullPath}");
-                Append($"日志备份文件：{LogPath}");
-                Append("流程：先『完整备份』→ 运行/产生数据 →『日志备份』→ 选时间点『恢复』。");
+                Append("流程：完整备份 → 改数据/误操作 → 日志备份 →（刷新日志）选中一条操作 → 恢复到之前/之后。");
+                LoadOpLog();
             };
 
             btnFull.Click += (_, _) => FullBackup();
             btnLog.Click += (_, _) => LogBackup();
-            btnRestore.Click += (_, _) => Restore();
+            btnRestore.Click += (_, _) => RunRestore(dtp.Value);
+            btnRefreshLog.Click += (_, _) => LoadOpLog();
+            btnBefore.Click += (_, _) => RestoreBySelectedRow(before: true);
+            btnAfter.Click += (_, _) => RestoreBySelectedRow(before: false);
+            gridLog.SelectionChanged += (_, _) =>
+            {
+                if (gridLog.CurrentRow?.Cells["时间"].Value is DateTime t
+                    && t >= dtp.MinDate && t <= dtp.MaxDate) dtp.Value = t;
+            };
         }
 
         void FullBackup()
@@ -91,18 +110,16 @@ namespace DormManagement.Forms
             catch (SqlException ex) { Fail("日志备份", ex); }
         }
 
-        void Restore()
+        void RunRestore(DateTime t)
         {
             if (!File.Exists(FullPath)) { MessageBox.Show("未找到完整备份文件，请先执行完整备份"); return; }
             if (!File.Exists(LogPath)) { MessageBox.Show("未找到日志备份文件，请先执行日志备份"); return; }
 
-            var t = dtp.Value;
             if (MessageBox.Show(
-                    $"将把 DormDB 恢复到 {t:yyyy-MM-dd HH:mm:ss}。\n" +
+                    $"将把 DormDB 恢复到 {t:yyyy-MM-dd HH:mm:ss.fff}。\n" +
                     "期间会断开该库所有连接并覆盖当前数据，确认继续？",
                     "确认时间点恢复", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes)
                 return;
-
             try
             {
                 ExecMaster(
@@ -113,17 +130,53 @@ namespace DormManagement.Forms
                     new SqlParameter("@full", FullPath),
                     new SqlParameter("@log", LogPath),
                     new SqlParameter("@t", t));
-                Append($"[时间点恢复] 成功，已恢复到 {t:yyyy-MM-dd HH:mm:ss}");
+                Append($"[时间点恢复] 成功，已恢复到 {t:yyyy-MM-dd HH:mm:ss.fff}");
                 MessageBox.Show("恢复成功");
             }
             catch (SqlException ex)
             {
                 Fail("时间点恢复", ex);
-                BringOnline();   // 无论失败在哪一步，都把库拉回在线，避免卡在 RESTORING 导致谁都登不进
+                BringOnline();
                 MessageBox.Show("时间点恢复失败：" + ex.Message +
-                    "\n\n已自动将数据库恢复到完整备份时刻并重新上线，可正常登录。\n" +
-                    "提示：日志备份须在完整备份之后再做，且所选时间点要落在日志覆盖范围内。");
+                    "\n\n已自动将数据库恢复到完整备份时刻并重新上线，可正常登录。");
             }
+            LoadOpLog();   // 回滚后日志也回到该刻，刷新时间线
+        }
+
+        // 时间线选中一行 → 计算 STOPAT（+500ms 缓冲确保跨过该笔事务提交点）→ 恢复
+        void RestoreBySelectedRow(bool before)
+        {
+            if (gridLog.CurrentRow?.Cells["编号"].Value is not int opId
+                || gridLog.CurrentRow.Cells["时间"].Value is not DateTime opTime)
+            { MessageBox.Show("请先在操作时间线中选择一条记录"); return; }
+
+            DateTime stopAt;
+            if (before)
+            {
+                var prev = DBHelper.Scalar("SELECT MAX(op_time) FROM OperationLog WHERE op_id < @id",
+                    new SqlParameter("@id", opId));
+                if (prev is null or DBNull)
+                { MessageBox.Show("这已是最早的操作记录；如需更早请直接还原完整备份基线。"); return; }
+                stopAt = Convert.ToDateTime(prev).AddMilliseconds(500);   // 含前一条，排除选中这条
+            }
+            else
+            {
+                stopAt = opTime.AddMilliseconds(500);   // 含选中这条
+            }
+            RunRestore(stopAt);
+        }
+
+        void LoadOpLog()
+        {
+            try
+            {
+                gridLog.DataSource = DBHelper.QueryTable(
+                    @"SELECT op_id AS 编号, op_time AS 时间, category AS 类别, action AS 操作,
+                             description AS 描述, operator AS 操作人
+                      FROM OperationLog ORDER BY op_id DESC");
+                if (gridLog.Columns.Contains("编号")) gridLog.Columns["编号"].Visible = false;
+            }
+            catch (SqlException ex) { Append("[操作时间线] 加载失败（OperationLog 是否已建？）：" + ex.Message); }
         }
 
         static void ExecMaster(string sql, params SqlParameter[] ps)
