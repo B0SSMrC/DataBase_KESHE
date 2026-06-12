@@ -71,10 +71,13 @@ namespace DormManagement.Forms
             if (txtNo.Text.Trim() == "") { MessageBox.Show("请填写楼号"); return; }
             try
             {
-                DBHelper.Execute("INSERT INTO Building(building_no,building_name,gender_type) VALUES(@n,@m,@g)",
-                    new SqlParameter("@n", txtNo.Text.Trim()),
-                    new SqlParameter("@m", NullIfEmpty(txtName.Text)),
-                    new SqlParameter("@g", NullIfEmpty(cmbGender.Text)));
+                DBHelper.ExecuteLogged(
+                    "INSERT INTO Building(building_no,building_name,gender_type) VALUES(@n,@m,@g)",
+                    new[] {
+                        new SqlParameter("@n", txtNo.Text.Trim()),
+                        new SqlParameter("@m", NullIfEmpty(txtName.Text)),
+                        new SqlParameter("@g", NullIfEmpty(cmbGender.Text)) },
+                    "宿舍楼", "新增", $"新增宿舍楼 {txtNo.Text.Trim()}");
                 LoadData();
             }
             catch (SqlException ex) when (ex.Number is 2627 or 2601) { MessageBox.Show("楼号已存在"); }
@@ -83,11 +86,14 @@ namespace DormManagement.Forms
         void Upd()
         {
             if (CurrentId() is not int id) { MessageBox.Show("请先选择一行"); return; }
-            DBHelper.Execute("UPDATE Building SET building_no=@n,building_name=@m,gender_type=@g WHERE building_id=@id",
-                new SqlParameter("@n", txtNo.Text.Trim()),
-                new SqlParameter("@m", NullIfEmpty(txtName.Text)),
-                new SqlParameter("@g", NullIfEmpty(cmbGender.Text)),
-                new SqlParameter("@id", id));
+            DBHelper.ExecuteLogged(
+                "UPDATE Building SET building_no=@n,building_name=@m,gender_type=@g WHERE building_id=@id",
+                new[] {
+                    new SqlParameter("@n", txtNo.Text.Trim()),
+                    new SqlParameter("@m", NullIfEmpty(txtName.Text)),
+                    new SqlParameter("@g", NullIfEmpty(cmbGender.Text)),
+                    new SqlParameter("@id", id) },
+                "宿舍楼", "修改", $"修改宿舍楼 {txtNo.Text.Trim()}（编号{id}）");
             LoadData();
         }
 
@@ -95,9 +101,12 @@ namespace DormManagement.Forms
         {
             if (CurrentId() is not int id) { MessageBox.Show("请先选择一行"); return; }
             if (MessageBox.Show("确认删除该宿舍楼？", "确认", MessageBoxButtons.YesNo) != DialogResult.Yes) return;
+            var no = grid.CurrentRow?.Cells["楼号"].Value?.ToString() ?? id.ToString();
             try
             {
-                DBHelper.Execute("DELETE FROM Building WHERE building_id=@id", new SqlParameter("@id", id));
+                DBHelper.ExecuteLogged("DELETE FROM Building WHERE building_id=@id",
+                    new[] { new SqlParameter("@id", id) },
+                    "宿舍楼", "删除", $"删除宿舍楼 {no}");
                 LoadData();
             }
             catch (SqlException ex) when (ex.Number == 547) { MessageBox.Show("该楼下还有寝室，无法删除"); }

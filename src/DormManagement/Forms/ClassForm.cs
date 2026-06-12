@@ -65,9 +65,11 @@ namespace DormManagement.Forms
             if (txtName.Text.Trim() == "" || txtMajor.Text.Trim() == "") { MessageBox.Show("班级名和专业都要填"); return; }
             try
             {
-                DBHelper.Execute("INSERT INTO ClassInfo(class_name,major) VALUES(@n,@m)",
-                    new SqlParameter("@n", txtName.Text.Trim()),
-                    new SqlParameter("@m", txtMajor.Text.Trim()));
+                DBHelper.ExecuteLogged("INSERT INTO ClassInfo(class_name,major) VALUES(@n,@m)",
+                    new[] {
+                        new SqlParameter("@n", txtName.Text.Trim()),
+                        new SqlParameter("@m", txtMajor.Text.Trim()) },
+                    "班级", "新增", $"新增班级 {txtName.Text.Trim()}");
                 LoadData();
             }
             catch (SqlException ex) when (ex.Number is 2627 or 2601) { MessageBox.Show("班级名已存在"); }
@@ -76,10 +78,12 @@ namespace DormManagement.Forms
         void Upd()
         {
             if (CurrentId() is not int id) { MessageBox.Show("请先选择一行"); return; }
-            DBHelper.Execute("UPDATE ClassInfo SET class_name=@n,major=@m WHERE class_id=@id",
-                new SqlParameter("@n", txtName.Text.Trim()),
-                new SqlParameter("@m", txtMajor.Text.Trim()),
-                new SqlParameter("@id", id));
+            DBHelper.ExecuteLogged("UPDATE ClassInfo SET class_name=@n,major=@m WHERE class_id=@id",
+                new[] {
+                    new SqlParameter("@n", txtName.Text.Trim()),
+                    new SqlParameter("@m", txtMajor.Text.Trim()),
+                    new SqlParameter("@id", id) },
+                "班级", "修改", $"修改班级 {txtName.Text.Trim()}（编号{id}）");
             LoadData();
         }
 
@@ -87,9 +91,12 @@ namespace DormManagement.Forms
         {
             if (CurrentId() is not int id) { MessageBox.Show("请先选择一行"); return; }
             if (MessageBox.Show("确认删除该班级？", "确认", MessageBoxButtons.YesNo) != DialogResult.Yes) return;
+            var cname = grid.CurrentRow?.Cells["班级名"].Value?.ToString() ?? id.ToString();
             try
             {
-                DBHelper.Execute("DELETE FROM ClassInfo WHERE class_id=@id", new SqlParameter("@id", id));
+                DBHelper.ExecuteLogged("DELETE FROM ClassInfo WHERE class_id=@id",
+                    new[] { new SqlParameter("@id", id) },
+                    "班级", "删除", $"删除班级 {cname}");
                 LoadData();
             }
             catch (SqlException ex) when (ex.Number == 547) { MessageBox.Show("该班级下还有学生，无法删除"); }
