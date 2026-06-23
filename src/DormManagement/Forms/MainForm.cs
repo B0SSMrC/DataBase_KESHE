@@ -11,6 +11,7 @@ namespace DormManagement.Forms
             _operator = loginName;
             Session.CurrentOperator = loginName;   // 供操作日志记录使用
             try { DBHelper.EnsureOperationLog(); } catch { /* 启动期自愈失败不阻塞主界面 */ }
+            try { DBHelper.EnsureUndoInfra(); } catch { /* 同上：撤销快照表自愈 */ }
             Text = "学生宿舍管理系统";
             Width = 920; Height = 620;
             StartPosition = FormStartPosition.CenterScreen;
