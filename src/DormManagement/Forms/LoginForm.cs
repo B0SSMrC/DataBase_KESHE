@@ -53,7 +53,7 @@ namespace DormManagement.Forms
             try
             {
                 var dt = DBHelper.QueryTable(
-                    "SELECT real_name FROM Admin WHERE username=@u AND password=CONVERT(NVARCHAR(100), HASHBYTES('SHA2_256', @p), 2)",
+                    "SELECT real_name FROM Admin WHERE username=@u AND password=@p",
                     new SqlParameter("@u", txtUser.Text.Trim()),
                     new SqlParameter("@p", txtPwd.Text));
                 if (dt.Rows.Count == 1)

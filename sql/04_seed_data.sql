@@ -31,5 +31,5 @@ INSERT INTO Student(student_no, name, gender, class_id, phone) VALUES
 ('2021003','王五','男',@c1,'13800000003');
 
 INSERT INTO Admin(username, password, real_name) VALUES
-('admin', CONVERT(NVARCHAR(100), HASHBYTES('SHA2_256', N'123456'), 2), '系统管理员');   -- 存口令的 SHA2_256 哈希(十六进制)，登录时同法比对（默认口令仍是 123456）
+('admin','123456','系统管理员');   -- 演示用明文口令（已知简化；生产应存哈希。注：口令哈希与 PITR 回滚相互冲突，课设保留明文）
 GO
