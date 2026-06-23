@@ -1,4 +1,4 @@
--- 04_seed_data.sql  基础测试数据（暂不含住宿分配）
+﻿-- 04_seed_data.sql  基础测试数据（暂不含住宿分配）
 USE DormDB;
 GO
 
@@ -31,5 +31,5 @@ INSERT INTO Student(student_no, name, gender, class_id, phone) VALUES
 ('2021003','王五','男',@c1,'13800000003');
 
 INSERT INTO Admin(username, password, real_name) VALUES
-('admin','123456','系统管理员');   -- 报告中说明：演示用明文，正式应存哈希
+('admin', CONVERT(NVARCHAR(100), HASHBYTES('SHA2_256', N'123456'), 2), '系统管理员');   -- 存口令的 SHA2_256 哈希(十六进制)，登录时同法比对（默认口令仍是 123456）
 GO

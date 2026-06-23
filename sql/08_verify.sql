@@ -1,4 +1,4 @@
--- 08_verify.sql  功能与约束验证（分三段执行）
+﻿-- 08_verify.sql  功能与约束验证（分三段执行）
 USE DormDB;
 GO
 

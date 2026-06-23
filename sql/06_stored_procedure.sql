@@ -1,4 +1,4 @@
--- 06_stored_procedure.sql  输入楼号+房号，返回该寝室住宿学生名单
+﻿-- 06_stored_procedure.sql  输入楼号+房号，返回该寝室住宿学生名单
 USE DormDB;
 GO
 CREATE OR ALTER PROCEDURE usp_GetRoomStudents

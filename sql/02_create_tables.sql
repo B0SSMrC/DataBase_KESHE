@@ -1,4 +1,4 @@
--- 02_create_tables.sql  按外键依赖顺序建表
+﻿-- 02_create_tables.sql  按外键依赖顺序建表
 USE DormDB;
 GO
 

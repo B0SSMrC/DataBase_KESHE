@@ -1,4 +1,4 @@
--- 03_create_indexes.sql  在外键列上建非聚集索引，加速连接
+﻿-- 03_create_indexes.sql  在外键列上建非聚集索引，加速连接
 USE DormDB;
 GO
 CREATE INDEX IX_Room_Building ON Room(building_id);

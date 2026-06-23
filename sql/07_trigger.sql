@@ -1,4 +1,4 @@
--- 07_trigger.sql  住宿分配增/改/删时，自动重算寝室已住人数与状态
+﻿-- 07_trigger.sql  住宿分配增/改/删时，自动重算寝室已住人数与状态
 USE DormDB;
 GO
 CREATE OR ALTER TRIGGER trg_Allocation_Occupancy

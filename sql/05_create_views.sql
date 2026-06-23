@@ -1,4 +1,4 @@
--- 05_create_views.sql
+﻿-- 05_create_views.sql
 USE DormDB;
 GO
 

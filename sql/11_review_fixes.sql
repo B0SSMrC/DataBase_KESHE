@@ -1,4 +1,4 @@
--- 11_review_fixes.sql  代码审查修复（幂等，可在已有库上直接执行）
+﻿-- 11_review_fixes.sql  代码审查修复（幂等，可在已有库上直接执行）
 -- 补齐 02/03 的两处一致性缺口：HousingLog.bed_id 索引 + Room.status 值域 CHECK
 USE DormDB;
 GO

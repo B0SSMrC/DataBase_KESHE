@@ -1,4 +1,4 @@
--- 09_backup_restore.sql  备份 / 恢复 / 基于时间点恢复(PITR)
+﻿-- 09_backup_restore.sql  备份 / 恢复 / 基于时间点恢复(PITR)
 -- 按步骤执行；Step 2 打印的时间点 T 要复制，填到 Step 5 的 STOPAT。
 
 -- ===== Step 1：完整备份 =====

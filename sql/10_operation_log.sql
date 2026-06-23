@@ -1,4 +1,4 @@
--- 10_operation_log.sql  通用操作日志（供时间点恢复的可点选时间线使用）
+﻿-- 10_operation_log.sql  通用操作日志（供时间点恢复的可点选时间线使用）
 USE DormDB;
 GO
 IF OBJECT_ID('OperationLog','U') IS NOT NULL DROP TABLE OperationLog;

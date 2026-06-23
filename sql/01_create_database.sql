@@ -1,4 +1,4 @@
--- 01_create_database.sql  创建数据库 + 完整恢复模式
+﻿-- 01_create_database.sql  创建数据库 + 完整恢复模式
 USE master;
 GO
 IF DB_ID('DormDB') IS NOT NULL
