@@ -105,16 +105,19 @@ namespace DormManagement.Forms
         {
             if (CurrentStudentId() is not int sid) { MessageBox.Show("请先在上表选择一名学生"); return; }
             if (cmbBed.SelectedValue is not int bid) { MessageBox.Show("请选择楼、房、空床"); return; }
+            if (GenderMismatch(sid, bid, out var gmsg)) { MessageBox.Show(gmsg); return; }
             try
             {
                 var sno = grid.CurrentRow?.Cells["学号"].Value?.ToString() ?? "";
                 var sname = grid.CurrentRow?.Cells["姓名"].Value?.ToString() ?? "";
-                DBHelper.ExecuteLogged("INSERT INTO Allocation(student_id,bed_id) VALUES(@s,@b)",
-                    new[] { new SqlParameter("@s", sid), new SqlParameter("@b", bid) },
+                // 分配 + 住宿流水在同一事务内（ExecuteLogged 还会一并记 OperationLog）
+                DBHelper.ExecuteLogged(
+                    @"INSERT INTO Allocation(student_id,bed_id) VALUES(@s,@b);
+                      INSERT INTO HousingLog(student_id,bed_id,op_type,operator) VALUES(@s,@b,N'入住',@op);",
+                    new[] {
+                        new SqlParameter("@s", sid), new SqlParameter("@b", bid),
+                        new SqlParameter("@op", NullIfEmpty(_operator)) },
                     "入住", "新增", $"入住 {sname}({sno})");
-                DBHelper.Execute("INSERT INTO HousingLog(student_id,bed_id,op_type,operator) VALUES(@s,@b,'入住',@op)",
-                    new SqlParameter("@s", sid), new SqlParameter("@b", bid),
-                    new SqlParameter("@op", NullIfEmpty(_operator)));
                 MessageBox.Show("入住成功");
                 LoadStudents(); LoadBeds();
             }
@@ -123,5 +126,20 @@ namespace DormManagement.Forms
         }
 
         static object NullIfEmpty(string s) => string.IsNullOrWhiteSpace(s) ? DBNull.Value : s.Trim();
+
+        // 性别一致性：学生性别与床位所属楼的 gender_type 不符则拦截（任一为空则放行）
+        static bool GenderMismatch(int sid, int bid, out string msg)
+        {
+            msg = "";
+            var gender = DBHelper.Scalar("SELECT gender FROM Student WHERE student_id=@s",
+                new SqlParameter("@s", sid))?.ToString();
+            var btype = DBHelper.Scalar(
+                @"SELECT b.gender_type FROM Bed bd JOIN Room r ON bd.room_id=r.room_id
+                  JOIN Building b ON r.building_id=b.building_id WHERE bd.bed_id=@b",
+                new SqlParameter("@b", bid))?.ToString();
+            if (!string.IsNullOrEmpty(gender) && !string.IsNullOrEmpty(btype) && gender != btype)
+            { msg = $"性别不符：{gender}生不能入住「{btype}」楼"; return true; }
+            return false;
+        }
     }
 }

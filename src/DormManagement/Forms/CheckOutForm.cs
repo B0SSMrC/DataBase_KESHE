@@ -61,12 +61,15 @@ namespace DormManagement.Forms
             if (MessageBox.Show($"确认为【{name}】办理退宿？", "确认", MessageBoxButtons.YesNo) != DialogResult.Yes) return;
 
             object bedParam = CurrentBedId() is int bid ? bid : DBNull.Value;
-            DBHelper.ExecuteLogged("DELETE FROM Allocation WHERE student_id=@s",
-                new[] { new SqlParameter("@s", sid) },
+            // 删分配 + 住宿流水在同一事务内（ExecuteLogged 还会一并记 OperationLog）
+            DBHelper.ExecuteLogged(
+                @"DELETE FROM Allocation WHERE student_id=@s;
+                  INSERT INTO HousingLog(student_id,bed_id,op_type,operator) VALUES(@s,@b,N'退宿',@op);",
+                new[] {
+                    new SqlParameter("@s", sid),
+                    new SqlParameter("@b", bedParam),
+                    new SqlParameter("@op", NullIfEmpty(_operator)) },
                 "退宿", "删除", $"退宿 {name}");
-            DBHelper.Execute("INSERT INTO HousingLog(student_id,bed_id,op_type,operator) VALUES(@s,@b,'退宿',@op)",
-                new SqlParameter("@s", sid), new SqlParameter("@b", bedParam),
-                new SqlParameter("@op", NullIfEmpty(_operator)));
             MessageBox.Show("退宿成功");
             LoadStudents();
         }

@@ -93,6 +93,7 @@ namespace DormManagement.Forms
         void Add()
         {
             if (txtNo.Text.Trim() == "" || txtName.Text.Trim() == "") { MessageBox.Show("学号和姓名必填"); return; }
+            if (!PhoneValid(txtPhone.Text)) { MessageBox.Show("电话格式不正确（应为 6-20 位数字，或留空）"); return; }
             try
             {
                 DBHelper.ExecuteLogged(
@@ -112,6 +113,7 @@ namespace DormManagement.Forms
         void Upd()
         {
             if (CurrentId() is not int id) { MessageBox.Show("请先选择一行"); return; }
+            if (!PhoneValid(txtPhone.Text)) { MessageBox.Show("电话格式不正确（应为 6-20 位数字，或留空）"); return; }
             try
             {
                 DBHelper.ExecuteLogged(
@@ -146,5 +148,8 @@ namespace DormManagement.Forms
         }
 
         static object NullIfEmpty(string s) => string.IsNullOrWhiteSpace(s) ? DBNull.Value : s.Trim();
+        // 电话：留空允许；非空须为 6-20 位数字
+        static bool PhoneValid(string p) => string.IsNullOrWhiteSpace(p)
+            || System.Text.RegularExpressions.Regex.IsMatch(p.Trim(), @"^\d{6,20}$");
     }
 }

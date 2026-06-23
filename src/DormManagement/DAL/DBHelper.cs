@@ -80,7 +80,7 @@ namespace DormManagement.DAL
                 tran.Commit();
                 return n;
             }
-            catch { tran.Rollback(); throw; }
+            catch { try { tran.Rollback(); } catch { /* 回滚自身异常忽略，保留并抛出原始异常 */ } throw; }
         }
 
         // 仅记一条操作日志（用于多语句操作如"新增寝室含建床位"，成功后调用）
