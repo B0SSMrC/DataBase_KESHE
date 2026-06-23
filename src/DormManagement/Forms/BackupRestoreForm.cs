@@ -44,14 +44,15 @@ namespace DormManagement.Forms
             var btnLog = new Button { Text = "日志备份", Width = 90 };
             var btnRestore = new Button { Text = "恢复到所选时间点", Width = 140 };
             var btnRefreshLog = new Button { Text = "刷新日志", Width = 80 };
-            var btnBefore = new Button { Text = "恢复到选中之前", Width = 120 };
-            var btnAfter = new Button { Text = "恢复到选中之后", Width = 120 };
+            var btnUndo = new Button { Text = "撤销到选中操作之前", Width = 150 };
 
             var top = new FlowLayoutPanel { Dock = DockStyle.Top, Height = 120, Padding = new Padding(8) };
             top.Controls.AddRange(new Control[] {
+                new Label{ Text="【数据库备份/恢复·要求8】", AutoSize=true, Padding=new Padding(0,10,0,0) },
                 btnFull, btnLog,
-                new Label{ Text="时间点", AutoSize=true, Padding=new Padding(14,10,0,0) }, dtp, btnRestore,
-                btnRefreshLog, btnBefore, btnAfter });
+                new Label{ Text="时间点", AutoSize=true, Padding=new Padding(10,10,0,0) }, dtp, btnRestore,
+                new Label{ Text="▏【操作撤销】", AutoSize=true, Padding=new Padding(12,10,0,0) },
+                btnRefreshLog, btnUndo });
 
             Controls.Add(gridLog);  // Fill（先加）
             Controls.Add(txtLog);   // Bottom
@@ -61,7 +62,8 @@ namespace DormManagement.Forms
             {
                 try { Directory.CreateDirectory(BackupDir); Append($"备份目录：{BackupDir}"); }
                 catch (Exception ex) { Append($"⚠ 备份目录不可用（{BackupDir}）：{ex.Message}。如本机无该路径，请把 BackupRestoreForm.BackupDir 改成本机可写目录。"); }
-                Append("流程：完整备份 → 改数据/误操作 → 日志备份 →（刷新日志）选中一条操作 → 恢复到之前/之后。");
+                Append("【备份/恢复·要求8】完整/日志备份 + 恢复到所选时间点（SQL Server PITR）。");
+                Append("【操作撤销】在下方时间线选中一条操作，点『撤销到选中操作之前』即可回退到该操作之前（不依赖备份文件、不锁库）。");
                 LoadOpLog();
             };
 
@@ -69,13 +71,7 @@ namespace DormManagement.Forms
             btnLog.Click += (_, _) => LogBackup();
             btnRestore.Click += (_, _) => RunRestore(dtp.Value);
             btnRefreshLog.Click += (_, _) => LoadOpLog();
-            btnBefore.Click += (_, _) => RestoreBySelectedRow(before: true);
-            btnAfter.Click += (_, _) => RestoreBySelectedRow(before: false);
-            gridLog.SelectionChanged += (_, _) =>
-            {
-                if (gridLog.CurrentRow?.Cells["时间"].Value is DateTime t
-                    && t >= dtp.MinDate && t <= dtp.MaxDate) dtp.Value = t;
-            };
+            btnUndo.Click += (_, _) => UndoToBeforeSelected();
         }
 
         void FullBackup()
@@ -160,33 +156,27 @@ namespace DormManagement.Forms
             LoadOpLog();   // 刷新时间线
         }
 
-        // 时间线选中一行 → 取相邻两条操作的中点作 STOPAT（必含一侧、必排除另一侧，避免越过目标）→ 恢复
-        void RestoreBySelectedRow(bool before)
+        // 撤销到选中操作之前：重载该操作执行前的整库快照（纯 DML，不依赖备份文件、不锁库）
+        void UndoToBeforeSelected()
         {
-            if (gridLog.CurrentRow?.Cells["编号"].Value is not int opId
-                || gridLog.CurrentRow.Cells["时间"].Value is not DateTime opTime)
+            if (gridLog.CurrentRow?.Cells["编号"].Value is not int opId)
             { MessageBox.Show("请先在操作时间线中选择一条记录"); return; }
+            if (!DBHelper.SnapshotExists(opId))
+            { MessageBox.Show("该操作没有可用快照（多为本功能上线前的旧操作），无法撤销。"); return; }
 
-            DateTime stopAt;
-            if (before)
+            var desc = gridLog.CurrentRow.Cells["描述"].Value?.ToString() ?? $"操作{opId}";
+            if (MessageBox.Show(
+                    $"将把数据库回退到【{desc}】执行之前的状态。\n该操作及其之后的所有操作都会被撤销，确认继续？",
+                    "确认撤销", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes)
+                return;
+            try
             {
-                var prev = DBHelper.Scalar("SELECT MAX(op_time) FROM OperationLog WHERE op_id < @id",
-                    new SqlParameter("@id", opId));
-                if (prev is null or DBNull)
-                { MessageBox.Show("这已是最早的操作记录；如需更早请直接还原完整备份基线。"); return; }
-                var prevTime = Convert.ToDateTime(prev);
-                stopAt = prevTime.AddTicks((opTime - prevTime).Ticks / 2);   // 前一条与选中之间的中点：含前一条、排除选中
+                DBHelper.RestoreSnapshot(opId);
+                Append($"[撤销] 已回退到操作 {opId}（{desc}）之前的状态。");
+                MessageBox.Show("撤销成功：数据库已回到该操作之前。");
             }
-            else
-            {
-                var next = DBHelper.Scalar("SELECT MIN(op_time) FROM OperationLog WHERE op_id > @id",
-                    new SqlParameter("@id", opId));
-                if (next is null or DBNull)
-                    stopAt = opTime.AddSeconds(1);   // 选中为最新一条，取其后一点
-                else
-                    stopAt = opTime.AddTicks((Convert.ToDateTime(next) - opTime).Ticks / 2);   // 选中与下一条之间：含选中、排除下一条
-            }
-            RunRestore(stopAt);
+            catch (SqlException ex) { Fail("撤销", ex); MessageBox.Show("撤销失败：" + ex.Message); }
+            LoadOpLog();
         }
 
         void LoadOpLog()
