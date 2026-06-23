@@ -12,11 +12,11 @@ namespace DormManagement.Forms
             SelectionMode = DataGridViewSelectionMode.FullRowSelect, MultiSelect = false,
             AutoGenerateColumns = true, AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill
         };
-        readonly TextBox txtNo = new() { Width = 100 };
-        readonly TextBox txtName = new() { Width = 90 };
+        readonly TextBox txtNo = new() { Width = 100, MaxLength = 20 };
+        readonly TextBox txtName = new() { Width = 90, MaxLength = 50 };
         readonly ComboBox cmbGender = new() { Width = 60, DropDownStyle = ComboBoxStyle.DropDownList };
         readonly ComboBox cmbClass = new() { Width = 130, DropDownStyle = ComboBoxStyle.DropDownList };
-        readonly TextBox txtPhone = new() { Width = 120 };
+        readonly TextBox txtPhone = new() { Width = 120, MaxLength = 20 };
 
         public StudentForm()
         {
@@ -112,17 +112,21 @@ namespace DormManagement.Forms
         void Upd()
         {
             if (CurrentId() is not int id) { MessageBox.Show("请先选择一行"); return; }
-            DBHelper.ExecuteLogged(
-                "UPDATE Student SET student_no=@no,name=@nm,gender=@g,class_id=@c,phone=@p WHERE student_id=@id",
-                new[] {
-                    new SqlParameter("@no", txtNo.Text.Trim()),
-                    new SqlParameter("@nm", txtName.Text.Trim()),
-                    new SqlParameter("@g", NullIfEmpty(cmbGender.Text)),
-                    new SqlParameter("@c", ClassIdParam()),
-                    new SqlParameter("@p", NullIfEmpty(txtPhone.Text)),
-                    new SqlParameter("@id", id) },
-                "学生", "修改", $"修改学生 {txtName.Text.Trim()}({txtNo.Text.Trim()})");
-            LoadData();
+            try
+            {
+                DBHelper.ExecuteLogged(
+                    "UPDATE Student SET student_no=@no,name=@nm,gender=@g,class_id=@c,phone=@p WHERE student_id=@id",
+                    new[] {
+                        new SqlParameter("@no", txtNo.Text.Trim()),
+                        new SqlParameter("@nm", txtName.Text.Trim()),
+                        new SqlParameter("@g", NullIfEmpty(cmbGender.Text)),
+                        new SqlParameter("@c", ClassIdParam()),
+                        new SqlParameter("@p", NullIfEmpty(txtPhone.Text)),
+                        new SqlParameter("@id", id) },
+                    "学生", "修改", $"修改学生 {txtName.Text.Trim()}({txtNo.Text.Trim()})");
+                LoadData();
+            }
+            catch (SqlException ex) when (ex.Number is 2627 or 2601) { MessageBox.Show("学号已存在"); }
         }
 
         void Del()

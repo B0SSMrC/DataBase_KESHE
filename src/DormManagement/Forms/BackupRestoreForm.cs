@@ -59,8 +59,8 @@ namespace DormManagement.Forms
 
             Load += (_, _) =>
             {
-                Directory.CreateDirectory(BackupDir);
-                Append($"备份目录：{BackupDir}");
+                try { Directory.CreateDirectory(BackupDir); Append($"备份目录：{BackupDir}"); }
+                catch (Exception ex) { Append($"⚠ 备份目录不可用（{BackupDir}）：{ex.Message}。如本机无该路径，请把 BackupRestoreForm.BackupDir 改成本机可写目录。"); }
                 Append("流程：完整备份 → 改数据/误操作 → 日志备份 →（刷新日志）选中一条操作 → 恢复到之前/之后。");
                 LoadOpLog();
             };
@@ -94,7 +94,7 @@ namespace DormManagement.Forms
                 }
                 MessageBox.Show("完整备份成功");
             }
-            catch (SqlException ex) { Fail("完整备份", ex); MessageBox.Show("完整备份失败：" + ex.Message); }
+            catch (Exception ex) { Fail("完整备份", ex); MessageBox.Show("完整备份失败：" + ex.Message); }
         }
 
         void LogBackup()
@@ -107,7 +107,7 @@ namespace DormManagement.Forms
                 Append($"[日志备份] 成功 → {LogPath}");
                 MessageBox.Show("日志备份成功");
             }
-            catch (SqlException ex) { Fail("日志备份", ex); }
+            catch (Exception ex) { Fail("日志备份", ex); MessageBox.Show("日志备份失败：" + ex.Message); }
         }
 
         void RunRestore(DateTime t)
@@ -193,6 +193,7 @@ namespace DormManagement.Forms
         {
             try
             {
+                DBHelper.EnsureOperationLog();   // 表若被 PITR 回退掉则补建，恢复后无需重启即自愈
                 gridLog.DataSource = DBHelper.QueryTable(
                     @"SELECT op_id AS 编号, op_time AS 时间, category AS 类别, action AS 操作,
                              description AS 描述, operator AS 操作人
@@ -231,7 +232,7 @@ namespace DormManagement.Forms
             catch (SqlException ex) { Append("[自动恢复] 失败：" + ex.Message); }
         }
 
-        void Fail(string op, SqlException ex) => Append($"[{op}] 失败：{ex.Message}");
+        void Fail(string op, Exception ex) => Append($"[{op}] 失败：{ex.Message}");
         void Append(string line) => txtLog.AppendText(line + Environment.NewLine);
     }
 }

@@ -12,8 +12,8 @@ namespace DormManagement.Forms
             SelectionMode = DataGridViewSelectionMode.FullRowSelect, MultiSelect = false,
             AutoGenerateColumns = true, AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill
         };
-        readonly TextBox txtName = new() { Width = 140 };
-        readonly TextBox txtMajor = new() { Width = 180 };
+        readonly TextBox txtName = new() { Width = 140, MaxLength = 50 };
+        readonly TextBox txtMajor = new() { Width = 180, MaxLength = 50 };
 
         public ClassForm()
         {
@@ -78,13 +78,17 @@ namespace DormManagement.Forms
         void Upd()
         {
             if (CurrentId() is not int id) { MessageBox.Show("请先选择一行"); return; }
-            DBHelper.ExecuteLogged("UPDATE ClassInfo SET class_name=@n,major=@m WHERE class_id=@id",
-                new[] {
-                    new SqlParameter("@n", txtName.Text.Trim()),
-                    new SqlParameter("@m", txtMajor.Text.Trim()),
-                    new SqlParameter("@id", id) },
-                "班级", "修改", $"修改班级 {txtName.Text.Trim()}（编号{id}）");
-            LoadData();
+            try
+            {
+                DBHelper.ExecuteLogged("UPDATE ClassInfo SET class_name=@n,major=@m WHERE class_id=@id",
+                    new[] {
+                        new SqlParameter("@n", txtName.Text.Trim()),
+                        new SqlParameter("@m", txtMajor.Text.Trim()),
+                        new SqlParameter("@id", id) },
+                    "班级", "修改", $"修改班级 {txtName.Text.Trim()}（编号{id}）");
+                LoadData();
+            }
+            catch (SqlException ex) when (ex.Number is 2627 or 2601) { MessageBox.Show("班级名已存在"); }
         }
 
         void Del()

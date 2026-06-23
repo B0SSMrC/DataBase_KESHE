@@ -12,8 +12,8 @@ namespace DormManagement.Forms
             SelectionMode = DataGridViewSelectionMode.FullRowSelect, MultiSelect = false,
             AutoGenerateColumns = true, AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill
         };
-        readonly TextBox txtNo = new() { Width = 110 };
-        readonly TextBox txtName = new() { Width = 140 };
+        readonly TextBox txtNo = new() { Width = 110, MaxLength = 20 };
+        readonly TextBox txtName = new() { Width = 140, MaxLength = 50 };
         readonly ComboBox cmbGender = new() { Width = 70, DropDownStyle = ComboBoxStyle.DropDownList };
 
         public BuildingForm()
@@ -86,15 +86,19 @@ namespace DormManagement.Forms
         void Upd()
         {
             if (CurrentId() is not int id) { MessageBox.Show("请先选择一行"); return; }
-            DBHelper.ExecuteLogged(
-                "UPDATE Building SET building_no=@n,building_name=@m,gender_type=@g WHERE building_id=@id",
-                new[] {
-                    new SqlParameter("@n", txtNo.Text.Trim()),
-                    new SqlParameter("@m", NullIfEmpty(txtName.Text)),
-                    new SqlParameter("@g", NullIfEmpty(cmbGender.Text)),
-                    new SqlParameter("@id", id) },
-                "宿舍楼", "修改", $"修改宿舍楼 {txtNo.Text.Trim()}（编号{id}）");
-            LoadData();
+            try
+            {
+                DBHelper.ExecuteLogged(
+                    "UPDATE Building SET building_no=@n,building_name=@m,gender_type=@g WHERE building_id=@id",
+                    new[] {
+                        new SqlParameter("@n", txtNo.Text.Trim()),
+                        new SqlParameter("@m", NullIfEmpty(txtName.Text)),
+                        new SqlParameter("@g", NullIfEmpty(cmbGender.Text)),
+                        new SqlParameter("@id", id) },
+                    "宿舍楼", "修改", $"修改宿舍楼 {txtNo.Text.Trim()}（编号{id}）");
+                LoadData();
+            }
+            catch (SqlException ex) when (ex.Number is 2627 or 2601) { MessageBox.Show("楼号已存在"); }
         }
 
         void Del()

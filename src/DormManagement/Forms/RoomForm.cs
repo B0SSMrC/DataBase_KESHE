@@ -13,7 +13,7 @@ namespace DormManagement.Forms
             AutoGenerateColumns = true, AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill
         };
         readonly ComboBox cmbBuilding = new() { Width = 120, DropDownStyle = ComboBoxStyle.DropDownList };
-        readonly TextBox txtRoomNo = new() { Width = 90 };
+        readonly TextBox txtRoomNo = new() { Width = 90, MaxLength = 20 };
         readonly NumericUpDown numCap = new() { Width = 60, Minimum = 1, Maximum = 8, Value = 4 };
 
         public RoomForm()
@@ -80,19 +80,22 @@ namespace DormManagement.Forms
             int cap = (int)numCap.Value;
             try
             {
-                // 插入寝室并取回新 room_id
-                var idObj = DBHelper.Scalar(
-                    "INSERT INTO Room(building_id,room_no,capacity) OUTPUT INSERTED.room_id VALUES(@b,@r,@c)",
-                    new SqlParameter("@b", bid),
-                    new SqlParameter("@r", txtRoomNo.Text.Trim()),
-                    new SqlParameter("@c", cap));
-                int roomId = Convert.ToInt32(idObj);
-                // 按床位数自动生成床位 1..cap
-                for (int i = 1; i <= cap; i++)
-                    DBHelper.Execute("INSERT INTO Bed(room_id,bed_no) VALUES(@r,@n)",
-                        new SqlParameter("@r", roomId),
-                        new SqlParameter("@n", i.ToString()));
-                DBHelper.Log("寝室", "新增", $"新增寝室 房号{txtRoomNo.Text.Trim()}（{cap}床）");
+                // 建寝室 + 按床位数批量建床位 + 记日志，全部在 ExecuteLogged 的单个事务内完成（原子，失败整体回滚）
+                DBHelper.ExecuteLogged(
+                    @"DECLARE @rid INT;
+                      INSERT INTO Room(building_id,room_no,capacity) VALUES(@b,@r,@c);
+                      SET @rid = SCOPE_IDENTITY();
+                      DECLARE @i INT = 1;
+                      WHILE @i <= @c
+                      BEGIN
+                          INSERT INTO Bed(room_id,bed_no) VALUES(@rid, CAST(@i AS NVARCHAR(10)));
+                          SET @i += 1;
+                      END",
+                    new[] {
+                        new SqlParameter("@b", bid),
+                        new SqlParameter("@r", txtRoomNo.Text.Trim()),
+                        new SqlParameter("@c", cap) },
+                    "寝室", "新增", $"新增寝室 房号{txtRoomNo.Text.Trim()}（{cap}床）");
                 LoadData();
                 MessageBox.Show($"已新增寝室并自动生成 {cap} 张床位");
             }
